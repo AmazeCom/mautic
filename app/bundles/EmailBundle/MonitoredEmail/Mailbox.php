@@ -108,6 +108,8 @@ class Mailbox
         $key = $bundle . (!empty($mailbox) ? '_' . $mailbox : '');
 
         if (isset($this->mailboxes[$key])) {
+            $this->disconnect();
+            $this->imapStream = null;
             $this->settings = (!empty($this->mailboxes[$key]['override_settings'])) ? $this->mailboxes[$key] : $this->mailboxes['general'];
             $this->imapFolder = $this->mailboxes[$key]['folder'];
             $this->setImapPath();
@@ -131,7 +133,7 @@ class Mailbox
      */
     public function setImapPath()
     {
-        $paths              = $this->getImapPath($this->settings);
+        $paths              = $this->getImapPath($this->settings, $this->imapFolder);
         $this->imapPath     = $paths['path'];
         $this->imapFullPath = $paths['full'];
     }
@@ -141,7 +143,7 @@ class Mailbox
      *
      * @return array
      */
-    public function getImapPath($settings)
+    public function getImapPath($settings, $folderOverride = null)
     {
         /**
          * @var $host
@@ -158,7 +160,9 @@ class Mailbox
         $path     = "{{$host}:{$port}/imap{$encryption}}";
         $fullPath = $path;
 
-        if (isset($folder)) {
+        if (isset($folderOverride)) {
+            $fullPath .= $folderOverride;
+        } elseif (isset($folder)) {
             $fullPath .= $folder;
         }
 
