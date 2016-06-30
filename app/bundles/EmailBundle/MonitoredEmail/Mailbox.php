@@ -108,6 +108,8 @@ class Mailbox
         $key = $bundle . (!empty($mailbox) ? '_' . $mailbox : '');
 
         if (isset($this->mailboxes[$key])) {
+            $this->disconnect();
+            $this->imapStream = null;
             $this->settings = (!empty($this->mailboxes[$key]['override_settings'])) ? $this->mailboxes[$key] : $this->mailboxes['general'];
             $this->imapFolder = $this->mailboxes[$key]['folder'];
             $this->setImapPath();
