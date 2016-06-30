@@ -74,9 +74,11 @@ class MessageHelper
         $dtHelper = new DateTimeHelper();
 
         // Assume is an unsubscribe
-        $isUnsubscribe = $allowUnsubscribe;
+        $isUnsubscribe = null;
         $isBounce      = false;
         $toEmail       = reset($message->to);
+        $sns           = null;
+        $bouncedEmail  = null;
 
         // Check for bounce emails via + notation if applicable
         foreach ($message->to as $to => $name) {
@@ -93,7 +95,28 @@ class MessageHelper
             }
         }
 
-        $this->logger->debug("Analyzing message to {$message->toString}");
+        if ($isUnsubscribe === null && $message->fromAddress=='no-reply@sns.amazonaws.com') {
+            $sns = json_decode(strtok($message->textPlain, "\n"), true);
+            if ($sns['notificationType']=='Bounce') {
+                if ($sns['bounce']['bounceType'] == 'Permanent') {
+                    $isBounce = true;
+                    $isUnsubscribe = false;
+                    $toEmail = $sns['mail']['source'];
+                    $bouncedEmail = $sns['bounce']['bouncedRecipients'][0]['emailAddress'];
+                }
+            } elseif ($sns['notificationType']=='Complaint') {
+                $isBounce      = false;
+                $isUnsubscribe = true;
+                $toEmail       = $sns['mail']['source'];
+                $bouncedEmail  = $sns['complaint']['complainedRecipients'][0]['emailAddress'];
+            }
+        }
+
+        if ($isUnsubscribe === null) {
+            $isUnsubscribe = $allowUnsubscribe;
+        }
+
+        $this->logger->debug("Analyzing message to {$message->toString} ($toEmail)");
 
         // Parse the to email if applicable
         if (preg_match('#^(.*?)\+(.*?)@(.*?)$#', $toEmail, $parts)) {
@@ -115,6 +138,8 @@ class MessageHelper
 
                 // Try parsing the report
                 $messageDetails = $this->parseDsn($dsnMessage, $dsnReport);
+            } elseif ($sns !== null) {
+                $messageDetails = $this->parseSNS($sns, $bouncedEmail);
             }
 
             if (empty($messageDetails['email']) || $messageDetails['rule_cat'] == 'unrecognized') {
@@ -2004,6 +2029,60 @@ class MessageHelper
                     'DSN Message'     => $dsn_msg.self::$bmh_newline
                 );
             }
+        } else {
+            if ($result['bounce_type'] === false) {
+                $result['bounce_type'] = self::$rule_categories[$result['rule_cat']]['bounce_type'];
+                $result['remove']      = self::$rule_categories[$result['rule_cat']]['remove'];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Defined bounce parsing rules for Amazon SES SNS
+     *
+     * @param string  $sns          decoded JSON
+     * @param string  $bouncedEmail failed recipient
+     * @param boolean $debug_mode   show debug info. or not
+     *
+     * @return array    $result an array include the following fields: 'email', 'bounce_type','remove','rule_no','rule_cat'
+     *                      if we could NOT detect the type of bounce, return rule_no = '0000'
+     */
+    static public function parseSNS($sns, $bouncedEmail = '', $debug_mode = false)
+    {
+        // initialize the result array
+        $result      = array(
+            'email'       => $bouncedEmail,
+            'bounce_type' => false,
+            'remove'      => 0,
+            'rule_cat'    => 'unrecognized',
+            'rule_no'     => '0000'
+        );
+
+        if ($sns['notificationType'] == 'Bounce') {
+            if ($sns['bounce']['bounceType'] == 'Permanent') {
+                $result['rule_cat'] = 'unknown';
+                $result['rule_no']  = '0280';
+            } elseif ($sns['bounce']['bounceType'] == 'Temporary') {
+                $result['rule_cat'] = 'warning';
+                $result['rule_no']  = '0281';
+            }
+        } elseif ($sns['notificationType'] == 'Complaint') {
+            $result['rule_cat'] = 'user_reject';
+            $result['rule_no']  = '0282';
+        }
+
+        if ($result['rule_no'] == '0000') {
+            /* if ($debug_mode) {
+                $result['debug'] = array(
+                    'email '          => $result['email'].self::$bmh_newline,
+                    'Action '         => $action.self::$bmh_newline,
+                    'Status '         => $status_code.self::$bmh_newline,
+                    'Diagnostic-Code' => $diag_code.self::$bmh_newline,
+                    'DSN Message'     => $dsn_msg.self::$bmh_newline
+                );
+            } */
         } else {
             if ($result['bounce_type'] === false) {
                 $result['bounce_type'] = self::$rule_categories[$result['rule_cat']]['bounce_type'];
