@@ -121,6 +121,17 @@ EOT
         if (empty($searchMailboxes)) {
 
             $output->writeln('No mailboxes are configured.');
+        } else {
+            $imap_alerts = imap_alerts();
+            $imap_alerts = $imap_alerts ? $imap_alerts : array();
+            foreach ($imap_alerts as $imap_alert) {
+                $output->writeln('IMAP ALERT: ' . $imap_alert);
+            }
+            $imap_errors = imap_errors();
+            $imap_errors = $imap_errors ? $imap_errors : array();
+            foreach ($imap_errors as $imap_error) {
+                $output->writeln('IMAP ALERT: ' . $imap_error);
+            }
         }
 
         return 0;
