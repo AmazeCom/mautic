@@ -113,6 +113,7 @@ class Mailbox
             $this->settings = (!empty($this->mailboxes[$key]['override_settings'])) ? $this->mailboxes[$key] : $this->mailboxes['general'];
             $this->imapFolder = $this->mailboxes[$key]['folder'];
             $this->setImapPath();
+            error_log("Switch to mailbox $key  (".$this->settings['user'].'@'.$this->imapFullPath.")");
         } else {
             throw new MailboxException($key . ' not found');
         }
